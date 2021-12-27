@@ -54,12 +54,12 @@ export const useCurveCrvAPY = (
     ) {
       const mcGauge = new MulticallContract(
         gauge.address,
-        gauge.interface.fragments,
+        [...gauge.interface.fragments],
       );
 
       const mcPool = new MulticallContract(
         pool.address,
-        pool.interface.fragments,
+        [...pool.interface.fragments],
       );
 
       const weight = await gaugeController["gauge_relative_weight(address)"](

@@ -4,6 +4,7 @@ import Grid from "@material-ui/core/Grid";
 import { Page } from "@geist-ui/react";
 import clsx from "clsx";
 import { useTranslation } from "next-i18next";
+import { PickleCore } from "../../containers/Jars/usePickleCore";
 
 import {
   crvJars,
@@ -38,26 +39,31 @@ const chartSkeletons = (charts) =>
     data: [],
   }));
 
+const createAllChartSkeletons= (pickleCore) => {
+  const ret = {};
+  if( pickleCore ) {
+    console.log("createAllChartSkeletons1");
+    const activeJars = pickleCore.assets.jars.filter((x)=>x.enablement === "enabled");
+    const chains = activeJars.map((x)=>x.chain);
+    const uniqueChains = new Set(chains).values();
+    for( let i = 0; i < uniqueChains.length; i++ ) {
+      ret[uniqueChains[i]] = chartSkeletons(activeJars.filter((x)=>x.chain === uniqueChains[i]).map((x)=>x.details.apiKey.toLowerCase()));
+    }
+    ret["allJars"] = chartSkeletons(activeJars.map((x)=>x.details.apiKey.toLowerCase()));
+    console.log("createAllChartSkeletons2");
+  }
+  return ret;
+}
+
 export default function Dashboard() {
   const classes = useStyles();
+  const { pickleCore } = PickleCore.useContainer();
 
-  const [dashboardData, setDashboardData] = useState({
-    crvJars: chartSkeletons(crvJars),
-    sushiJars: chartSkeletons(sushiJars),
-    uniJars: chartSkeletons(uniJars),
-    polyJars: chartSkeletons(polyJars),
-    arbJars: chartSkeletons(arbJars),
-    allJars: chartSkeletons([
-      ...crvJars,
-      ...uniJars,
-      ...sushiJars,
-      ...polyJars,
-      ...arbJars,
-    ]),
-  });
-
+  const [dashboardData, setDashboardData] = useState(createAllChartSkeletons(pickleCore));
   useEffect(() => {
+    console.log("Inside useEffect 1");
     const retrieveDashboardData = async () => {
+      console.log("Inside retrieveDashboardData first line 1");
       const requests = [getProtocolData(), getAllJarsChart()];
       const dashboardData = await Promise.all(requests);
 
@@ -78,34 +84,36 @@ export default function Dashboard() {
         return filtered;
       };
 
-      const crvData = filterJars(crvJars, allJarsData);
-      const sushiData = filterJars(sushiJars, allJarsData);
-      const uniData = filterJars(uniJars, allJarsData);
-      const polyData = filterJars(polyJars, allJarsData);
-      const arbData = filterJars(arbJars, allJarsData);
-
+      console.log("retrieveDashboardData1");
+      let ret = {};
+      console.log("pfcore is " + pickleCore);
+      const activeJars = pickleCore && pickleCore.assets ? pickleCore.assets.jars.filter((x)=>x.enablement === "enabled") : [];
+      const chains = activeJars.map((x)=>x.chain);
+      const uniqueChains = Array.from(new Set(chains));
+      console.log("Chains are: " + uniqueChains);
+      for( let i = 0; i < uniqueChains.length; i++ ) {
+        const chainJarList = activeJars.filter((x)=>x.chain === uniqueChains[i]).map((x)=>x.details.apiKey);
+        console.log("setting ret[" + uniqueChains[i] + "]");
+        ret[uniqueChains[i]] = filterJars(chainJarList, allJarsData);
+      }
+      ret.allJars = allJarsData;
+      ret.metrics = metrics;
+      console.log("retrieveDashboardData2");
+      console.log("This is the model: " + JSON.stringify(ret));
       // construct staking data
-      setDashboardData({
-        crvJars: crvData,
-        metrics: metrics,
-        sushiJars: sushiData,
-        uniJars: uniData,
-        polyJars: polyData,
-        arbJars: arbData,
-        allJars: allJarsData,
-      });
+      setDashboardData(ret);
     };
     retrieveDashboardData();
-  }, []);
+  }, [pickleCore]);
 
-  const assets = dashboardData.allJars
+  const assets = (dashboardData.allJars || [])
     .filter((d) => d !== null && d !== undefined)
     .map((d) => {
       return d.asset;
     });
   const blockData = {};
   const mostRecent = {};
-  dashboardData.allJars.forEach((item) => {
+  (dashboardData.allJars || []).forEach((item) => {
     if (!item || !item.data) return;
     item.data.forEach((d) => {
       if (blockData[d.x] === undefined) {
@@ -149,66 +157,31 @@ export default function Dashboard() {
             <JarValueChart jar={tvlJar} />
           </Grid>
 
-          <Grid
-            item
-            xs={12}
-            className={clsx(classes.section, classes.separator)}
-          >
-            <h1>{t("info.polyJars")}</h1>
-          </Grid>
-          {dashboardData.polyJars.map((jar) => {
-            return (
-              <Grid item xs={12} sm={6} key={jar.asset}>
-                <JarValueChart jar={jar} />
-              </Grid>
-            );
-          })}
 
-          <Grid
-            item
-            xs={12}
-            className={clsx(classes.section, classes.separator)}
-          >
-            <h1>{t("info.arbJars")}</h1>
-          </Grid>
-          {dashboardData.arbJars.map((jar) => {
+          {dashboardData === undefined ? [] : Object.keys(dashboardData).filter((x)=>x !== "metrics" && x !== "allJars").map((x) => {
             return (
-              <Grid item xs={12} sm={6} key={jar.asset}>
-                <JarValueChart jar={jar} />
-              </Grid>
-            );
-          })}
+            <>
+              <Grid
+              item
+              xs={12} key={"chain" + x}
+              className={clsx(classes.section, classes.separator)}>
+              <h1>{"Chain " + x}</h1>
+            </Grid>
 
-          <Grid
-            item
-            xs={12}
-            className={clsx(classes.section, classes.separator)}
-          >
-            <h1>pJar 0</h1>
-          </Grid>
-          {dashboardData.crvJars.map((jar) => {
-            return (
-              <Grid item xs={12} sm={6} key={jar.asset}>
-                <JarValueChart jar={jar} />
-              </Grid>
-            );
-          })}
-          <Grid
-            item
-            xs={12}
-            className={clsx(classes.section, classes.separator)}
-          >
-            <h1>pJar 0.99</h1>
-          </Grid>
-          {dashboardData.sushiJars
-            .concat(dashboardData.uniJars)
-            .map((jar, i) => {
+            {
+            console.log(JSON.stringify(dashboardData)) ||
+            console.log("x is " + x) ||
+            console.log("dashboardData[x] is " + dashboardData[x]) ||
+            dashboardData[x].map((jar) => {
               return (
-                <Grid item xs={12} sm={6} key={i}>
+                <Grid item xs={12} sm={6} key={jar.asset}>
                   <JarValueChart jar={jar} />
                 </Grid>
               );
             })}
+            </>
+          );
+          })}
         </Grid>
         <Footer />
       </Page>
